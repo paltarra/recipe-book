@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recipe Book</title>
+  <style>
+    :root {
+      --cream:  #faf7f2;
+      --paper:  #fff9f2;
+      --tan:    #e8dfd0;
+      --brown:  #5c3d2e;
+      --rust:   #b5451b;
+      --sage:   #4a6741;
+      --ink:    #2b2018;
+      --muted:  #7a6a5a;
+      --radius: 12px;
+      --shadow: 0 2px 12px rgba(0,0,0,.08);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; }
+    body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; background: var(--cream); color: var(--ink); min-height: 100vh; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── LAYOUT ── */
+    #app { display: flex; min-height: 100vh; }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: 240px; min-width: 240px; background: var(--brown); color: #fff;
+      display: flex; flex-direction: column;
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    }
+    #sidebar-header { padding: 26px 20px 18px; border-bottom: 1px solid rgba(255,255,255,.15); }
+    #sidebar-header h1 { font-family: Georgia, serif; font-size: 1.3rem; font-weight: normal; color: #fff; }
+    #sidebar-header p { font-size: .7rem; color: rgba(255,255,255,.5); margin-top: 3px; letter-spacing: .07em; text-transform: uppercase; }
+
+    #search-box { margin: 12px 14px 4px; position: relative; }
+    #search-box input {
+      width: 100%; padding: 8px 10px 8px 32px; border-radius: 8px; border: none;
+      background: rgba(255,255,255,.13); color: #fff; font-size: .85rem; outline: none;
+    }
+    #search-box input::placeholder { color: rgba(255,255,255,.4); }
+    #search-box svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; opacity: .45; pointer-events: none; }
+
+    #category-list { padding: 8px 0 16px; flex: 1; }
+    .cat-heading { padding: 10px 20px 4px; font-size: .63rem; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.38); }
+    .cat-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 20px; background: none; border: none; color: rgba(255,255,255,.78); font-size: .87rem; cursor: pointer; text-align: left; transition: background .15s; }
+    .cat-btn:hover { background: rgba(255,255,255,.1); }
+    .cat-btn.active { background: rgba(255,255,255,.18); color: #fff; font-weight: 600; }
+    .cat-btn .count { margin-left: auto; background: rgba(255,255,255,.18); border-radius: 20px; padding: 1px 7px; font-size: .7rem; }
+
+    #sidebar-footer { padding: 12px 20px; border-top: 1px solid rgba(255,255,255,.1); display: flex; align-items: center; justify-content: space-between; }
+    #sidebar-footer span { font-size: .7rem; color: rgba(255,255,255,.3); }
+    #settings-btn { background: none; border: none; color: rgba(255,255,255,.45); cursor: pointer; padding: 4px; border-radius: 6px; display: flex; align-items: center; transition: color .15s; }
+    #settings-btn:hover { color: rgba(255,255,255,.85); }
+
+    #sync-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.25); display: inline-block; margin-left: 6px; transition: background .3s; }
+    #sync-dot.synced  { background: #6dbf6d; }
+    #sync-dot.syncing { background: #f0c040; }
+    #sync-dot.error   { background: #e05555; }
+
+    /* ── MAIN ── */
+    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    /* ── SETUP BANNER ── */
+    #setup-banner { background: var(--brown); color: #fff; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    #setup-banner p { font-size: .85rem; }
+    #setup-banner button { background: rgba(255,255,255,.2); color: #fff; border: none; border-radius: 8px; padding: 6px 14px; font-size: .82rem; cursor: pointer; font-family: inherit; white-space: nowrap; }
+    #setup-banner button:hover { background: rgba(255,255,255,.32); }
+
+    /* ── LIST ── */
+    #list-view { padding: 28px 24px; }
+    #list-view h2 { font-family: Georgia, serif; font-size: 1.5rem; font-weight: normal; color: var(--brown); margin-bottom: 4px; }
+    .subtitle { font-size: .85rem; color: var(--muted); margin-bottom: 20px; }
+    #recipe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+
+    .recipe-card { background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; cursor: pointer; transition: transform .15s, box-shadow .15s; border: 1px solid var(--tan); }
+    .recipe-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+    .recipe-card img { width: 100%; height: 180px; object-fit: cover; display: block; }
+    .recipe-card .card-body { padding: 14px 16px 16px; }
+    .recipe-card .card-cat { font-size: .67rem; text-transform: uppercase; letter-spacing: .08em; color: var(--rust); font-weight: 600; margin-bottom: 4px; }
+    .recipe-card h3 { font-family: Georgia, serif; font-size: 1rem; font-weight: normal; color: var(--ink); line-height: 1.35; margin-bottom: 8px; }
+    .recipe-card .card-meta { display: flex; gap: 12px; font-size: .75rem; color: var(--muted); }
+
+    #empty-state { padding: 60px 24px; text-align: center; color: var(--muted); font-size: .95rem; }
+
+    /* ── DETAIL ── */
+    #detail-view { display: none; }
+    #detail-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px 0; }
+    #back-btn { display: flex; align-items: center; gap: 6px; background: none; border: none; color: var(--rust); font-size: .88rem; cursor: pointer; font-family: inherit; }
+    #back-btn:hover { text-decoration: underline; }
+    #print-btn { display: flex; align-items: center; gap: 6px; background: var(--tan); border: none; border-radius: 8px; padding: 7px 14px; font-size: .82rem; color: var(--brown); cursor: pointer; font-family: inherit; transition: background .15s; }
+    #print-btn:hover { background: #d5cbbf; }
+
+    #recipe-hero { width: 100%; max-height: 420px; object-fit: cover; display: block; margin-top: 14px; }
+    #recipe-body { padding: 24px 28px 48px; max-width: 920px; }
+
+    .recipe-eyebrow { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; color: var(--rust); font-weight: 700; margin-bottom: 8px; }
+    #recipe-title { font-family: Georgia, serif; font-size: 2rem; font-weight: normal; color: var(--brown); line-height: 1.2; margin-bottom: 10px; }
+    #recipe-description { font-size: .95rem; color: var(--muted); line-height: 1.6; margin-bottom: 18px; max-width: 680px; }
+
+    .meta-strip { display: flex; flex-wrap: wrap; background: var(--tan); border-radius: var(--radius); margin-bottom: 28px; overflow: hidden; }
+    .meta-item { flex: 1; min-width: 90px; padding: 12px 16px; border-right: 1px solid rgba(255,255,255,.6); }
+    .meta-item:last-child { border-right: none; }
+    .meta-item .meta-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 2px; }
+    .meta-item .meta-value { font-size: .95rem; font-weight: 600; color: var(--brown); }
+
+    #recipe-columns { display: grid; grid-template-columns: 280px 1fr; gap: 32px; align-items: start; }
+
+    #ingredients-col h2, #method-col h2 { font-family: Georgia, serif; font-size: 1.2rem; font-weight: normal; color: var(--brown); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 2px solid var(--tan); }
+    .ing-group { margin-bottom: 18px; }
+    .ing-group-title { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: var(--rust); font-weight: 700; margin-bottom: 8px; }
+    .ing-item { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--tan); cursor: pointer; user-select: none; }
+    .ing-item:last-child { border-bottom: none; }
+    .ing-check { width: 20px; height: 20px; min-width: 20px; border: 2px solid #ccc; border-radius: 5px; background: #fff; margin-top: 1px; display: flex; align-items: center; justify-content: center; transition: background .15s, border-color .15s; flex-shrink: 0; }
+    .ing-item.checked .ing-check { background: var(--sage); border-color: var(--sage); }
+    .ing-item.checked .ing-check::after { content: ''; width: 5px; height: 9px; border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(45deg) translateY(-1px); display: block; }
+    .ing-item.checked .ing-text { text-decoration: line-through; color: var(--muted); }
+    .ing-text { font-size: .88rem; line-height: 1.45; color: var(--ink); }
+
+    #method-col ol { list-style: none; padding: 0; }
+    #method-col ol li { display: flex; gap: 14px; margin-bottom: 16px; align-items: flex-start; }
+    .step-num { min-width: 28px; height: 28px; background: var(--rust); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 700; margin-top: 2px; flex-shrink: 0; }
+    .step-text { font-size: .92rem; line-height: 1.6; color: var(--ink); padding-top: 4px; }
+
+    #recipe-notes { margin-top: 24px; background: #fff8ee; border-left: 3px solid var(--rust); border-radius: 0 8px 8px 0; padding: 14px 18px; font-size: .88rem; line-height: 1.6; color: var(--ink); }
+    .notes-label { color: var(--rust); display: block; margin-bottom: 4px; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
+
+    /* user notes */
+    #user-notes-section { margin-top: 22px; border: 1px solid var(--tan); border-radius: var(--radius); overflow: hidden; }
+    #user-notes-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--tan); cursor: pointer; }
+    #user-notes-header span { font-size: .82rem; font-weight: 600; color: var(--brown); }
+    #user-notes-header .chevron { font-size: .72rem; color: var(--muted); transition: transform .2s; }
+    #user-notes-header.open .chevron { transform: rotate(90deg); }
+    #user-notes-body { display: none; padding: 14px 16px 16px; background: var(--paper); }
+    #user-notes-body.open { display: block; }
+    #user-notes-ta { width: 100%; min-height: 100px; border: 1px solid var(--tan); border-radius: 8px; padding: 10px 12px; font-size: .88rem; line-height: 1.5; font-family: inherit; color: var(--ink); background: #fff; resize: vertical; outline: none; }
+    #user-notes-ta:focus { border-color: var(--rust); }
+    #user-notes-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    #user-notes-hint { font-size: .72rem; color: var(--muted); }
+    #user-notes-save { background: var(--rust); color: #fff; border: none; border-radius: 8px; padding: 7px 16px; font-size: .82rem; cursor: pointer; font-family: inherit; transition: background .15s; }
+    #user-notes-save:hover { background: #963b16; }
+    #user-notes-status { font-size: .73rem; color: var(--sage); min-width: 80px; text-align: right; }
+
+    #nutrition-toggle { margin-top: 20px; background: none; border: 1px solid var(--tan); border-radius: 8px; padding: 10px 16px; font-size: .85rem; color: var(--muted); cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; }
+    #nutrition-toggle:hover { background: var(--tan); }
+    #nutrition-panel { display: none; margin-top: 8px; background: var(--paper); border: 1px solid var(--tan); border-radius: 8px; padding: 14px 18px; }
+    #nutrition-panel.open { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+    .nutr-item { font-size: .82rem; color: var(--muted); }
+    .nutr-item strong { color: var(--ink); }
+
+    #recipe-source { margin-top: 18px; font-size: .78rem; color: var(--muted); }
+    #recipe-source a { color: var(--rust); }
+    #recipe-source a:hover { text-decoration: underline; }
+
+    /* ── SETTINGS MODAL ── */
+    #settings-modal { display: none; position: fixed; inset: 0; z-index: 100; }
+    #settings-modal.open { display: flex; align-items: center; justify-content: center; }
+    #settings-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+    #settings-box { position: relative; z-index: 1; background: var(--paper); border-radius: 16px; padding: 28px 28px 24px; width: min(480px, 92vw); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+    #settings-box h2 { font-family: Georgia, serif; font-size: 1.2rem; font-weight: normal; color: var(--brown); margin-bottom: 6px; }
+    #settings-box p { font-size: .82rem; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: .75rem; font-weight: 600; color: var(--brown); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; }
+    .field input { width: 100%; padding: 9px 12px; border: 1px solid var(--tan); border-radius: 8px; font-size: .9rem; font-family: inherit; color: var(--ink); background: #fff; outline: none; }
+    .field input:focus { border-color: var(--rust); }
+    .field small { display: block; margin-top: 4px; font-size: .72rem; color: var(--muted); }
+    #settings-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; flex-wrap: wrap; }
+    .btn-primary { background: var(--rust); color: #fff; border: none; border-radius: 8px; padding: 9px 20px; font-size: .88rem; cursor: pointer; font-family: inherit; }
+    .btn-primary:hover { background: #963b16; }
+    .btn-secondary { background: var(--tan); color: var(--brown); border: none; border-radius: 8px; padding: 9px 20px; font-size: .88rem; cursor: pointer; font-family: inherit; }
+    .btn-secondary:hover { background: #d5cbbf; }
+    #settings-error { font-size: .8rem; color: #c0392b; margin-top: 8px; display: none; }
+
+    /* ── PRINT ── */
+    @media print {
+      #sidebar, #detail-toolbar, #user-notes-section,
+      #nutrition-toggle, .ing-check, #setup-banner, #settings-modal { display: none !important; }
+      #app { display: block; }
+      #list-view { display: none !important; }
+      #detail-view { display: block !important; }
+      #recipe-hero { max-height: 260px; }
+      #recipe-body { padding: 12px 0; }
+      #recipe-columns { grid-template-columns: 200px 1fr; gap: 20px; }
+      .ing-item { border-bottom: 1px solid #ddd; padding: 3px 0; }
+      .ing-item.checked .ing-text { text-decoration: none; color: var(--ink); }
+      #nutrition-panel { display: flex !important; flex-wrap: wrap; gap: 6px 20px; }
+      body { font-size: 11pt; }
+      #recipe-title { font-size: 20pt; }
+      #print-user-notes { display: block !important; }
+    }
+    #print-user-notes { display: none; margin-top: 20px; padding: 12px 16px; border: 1px solid #ddd; border-radius: 6px; font-size: .88rem; line-height: 1.6; }
+    #print-user-notes strong { display: block; margin-bottom: 6px; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--brown); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      #sidebar { width: 200px; min-width: 200px; }
+      #recipe-columns { grid-template-columns: 1fr; }
+      #recipe-title { font-size: 1.5rem; }
+      #recipe-body { padding: 20px 18px 40px; }
+    }
+    @media (max-width: 580px) {
+      #app { flex-direction: column; }
+      #sidebar { width: 100%; height: auto; position: relative; }
+      #category-list { display: flex; flex-wrap: wrap; padding: 8px 12px; }
+      .cat-btn { width: auto; padding: 5px 12px; border-radius: 20px; }
+      .cat-heading { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <nav id="sidebar">
+    <div id="sidebar-header">
+      <h1>Recipe Book</h1>
+      <p>Nick's collection</p>
+    </div>
+    <div id="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="search-input" placeholder="Search recipes…" oninput="filterRecipes()">
+    </div>
+    <div id="category-list">
+      <div class="cat-heading">Browse</div>
+      <button class="cat-btn active" onclick="filterCat('all', this)">
+        All Recipes <span class="count" id="count-all">0</span>
+      </button>
+    </div>
+    <div id="sidebar-footer">
+      <span>Notes <span id="sync-dot"></span></span>
+      <button id="settings-btn" title="GitHub sync settings" onclick="openSettings()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <main id="main">
+
+    <div id="setup-banner" style="display:none">
+      <p>🔗 Connect GitHub to sync your notes across all devices.</p>
+      <button onclick="openSettings()">Set up now</button>
+    </div>
+
+    <div id="list-view">
+      <h2 id="list-heading">All Recipes</h2>
+      <p class="subtitle" id="list-subtitle"></p>
+      <div id="recipe-grid"></div>
+      <div id="empty-state" style="display:none">No recipes found.</div>
+    </div>
+
+    <div id="detail-view">
+      <div id="detail-toolbar">
+        <button id="back-btn" onclick="showList()">← Back to recipes</button>
+        <button id="print-btn" onclick="window.print()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print recipe
+        </button>
+      </div>
+      <img id="recipe-hero" src="" alt="">
+      <div id="recipe-body">
+        <div class="recipe-eyebrow" id="detail-cat"></div>
+        <h1 id="recipe-title"></h1>
+        <p id="recipe-description"></p>
+        <div class="meta-strip">
+          <div class="meta-item"><div class="meta-label">Serves</div><div class="meta-value" id="meta-serves"></div></div>
+          <div class="meta-item"><div class="meta-label">Prep</div><div class="meta-value" id="meta-prep"></div></div>
+          <div class="meta-item"><div class="meta-label">Cook</div><div class="meta-value" id="meta-cook"></div></div>
+          <div class="meta-item"><div class="meta-label">Total</div><div class="meta-value" id="meta-total"></div></div>
+        </div>
+        <div id="recipe-columns">
+          <div id="ingredients-col">
+            <h2>Ingredients</h2>
+            <div id="ingredients-list"></div>
+          </div>
+          <div id="method-col">
+            <h2>Method</h2>
+            <ol id="method-list"></ol>
+            <div id="recipe-notes" style="display:none"></div>
+            <div id="user-notes-section">
+              <div id="user-notes-header" onclick="toggleUserNotes()">
+                <span>✏️  My Notes</span>
+                <span class="chevron">▶</span>
+              </div>
+              <div id="user-notes-body">
+                <textarea id="user-notes-ta" placeholder="Substitutions, tweaks, what you'd do differently next time…"></textarea>
+                <div id="user-notes-footer">
+                  <span id="user-notes-hint"></span>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span id="user-notes-status"></span>
+                    <button id="user-notes-save" onclick="saveUserNotes()">Save</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="print-user-notes"></div>
+            <button id="nutrition-toggle" onclick="toggleNutrition()">▸ Nutrition info (per serving)</button>
+            <div id="nutrition-panel"></div>
+            <div id="recipe-source"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settings-modal">
+  <div id="settings-backdrop" onclick="closeSettings()"></div>
+  <div id="settings-box">
+    <h2>GitHub Sync Settings</h2>
+    <p>Your notes are saved to a <code>notes.json</code> file in your GitHub repo and synced across all devices. Your token is stored only in this browser, never sent anywhere except GitHub.</p>
+    <div class="field">
+      <label>GitHub Username</label>
+      <input type="text" id="gh-owner" placeholder="e.g. nick" autocomplete="off" autocapitalize="none" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>Repository Name</label>
+      <input type="text" id="gh-repo" placeholder="e.g. recipe-book" autocomplete="off" autocapitalize="none" spellcheck="false">
+    </div>
+    <div class="field">
+      <label>Personal Access Token</label>
+      <input type="password" id="gh-token" placeholder="ghp_…" autocomplete="off">
+      <small>GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → tick <strong>repo</strong></small>
+    </div>
+    <div id="settings-error"></div>
+    <div id="settings-actions">
+      <button class="btn-secondary" onclick="clearSettings()">Disconnect</button>
+      <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
+      <button class="btn-primary" onclick="saveSettings()">Save &amp; Sync</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════
+   RECIPES
+══════════════════════════ */
+const RECIPES = [
+  {
+    id: 1,
+    name: "Bo Kho: Spicy Vietnamese Beef Stew with Noodles",
+    category: "Soups & Noodles",
+    serves: "8", prep: "40 min", cook: "2 hr 20 min", total: "3 hr",
+    source: "The Woks of Life",
+    sourceUrl: "https://thewoksoflife.com/bo-kho-spicy-vietnamese-beef-stew/",
+    image: "https://thewoksoflife.com/wp-content/uploads/2017/10/vietnamese-bho-kho-12.jpg",
+    description: "A spicy, fragrant Vietnamese beef stew loaded with lemongrass, five-spice and coconut water — a deeply satisfying change from a bowl of pho.",
+    ingredientGroups: [
+      { title: "Beef Marinade", items: [
+        "2–2½ lb (900g–1.1kg) boneless beef chuck or brisket, cut into 1½-inch chunks",
+        "2 cloves garlic, minced", "3 tbsp ginger, minced", "5 tbsp fish sauce",
+        "2½ tsp five-spice powder", "1½ tsp brown sugar"
+      ]},
+      { title: "Stew", items: [
+        "3 tbsp neutral oil",
+        "1 stalk lemongrass, cut into 3-inch lengths (tough parts removed)",
+        "2 stalks lemongrass, minced (tough parts removed)",
+        "8 cloves garlic, minced", "1 onion, thinly sliced", "4 tbsp tomato paste",
+        "8 cups (2L) water", "2 cups (500ml) pure coconut water", "2 star anise",
+        "1 tsp ground black pepper", "1 tsp chili powder",
+        "1 tsp ground annatto (optional — substitute extra paprika)", "1 tbsp paprika",
+        "8 large carrots, peeled, cut on the bias into 1½-inch chunks",
+        "1 tsp salt", "3 tbsp soy sauce", "3 tbsp chili oil, or to taste"
+      ]},
+      { title: "To Serve", items: [
+        "Wide rice noodles or egg noodles",
+        "¼ cup fresh cilantro, coarsely chopped", "½ cup Thai basil leaves",
+        "½ cup thinly sliced raw white onion", "Lime wedges"
+      ]}
+    ],
+    method: [
+      "Combine beef with garlic, ginger, fish sauce, five-spice powder, and brown sugar until evenly coated. Marinate for 30 minutes.",
+      "Heat oil in a large stock pot or Dutch oven over high heat. Add the lemongrass stalks and infuse the oil for 1 minute. Add minced lemongrass and garlic; cook for 2 minutes.",
+      "Add the sliced onion and cook until translucent. Add all the beef and brown evenly on all sides. Stir in the tomato paste.",
+      "Cook uncovered for 5 minutes. Add water, coconut water, star anise, black pepper, chili powder, annatto, and paprika. Bring to a boil, then reduce heat to medium-low and simmer covered for 1 hour.",
+      "Add carrots, salt, soy sauce, and chili oil. Simmer uncovered for a further 40 minutes.",
+      "Remove and discard lemongrass stalks and star anise. Cook noodles per package instructions, divide between bowls, and ladle the hot stew over the top.",
+      "Garnish with cilantro, Thai basil, raw onion, and lime wedges. Serve immediately."
+    ],
+    notes: "Bo Kho can also be served with steamed rice or crusty French bread. Ground annatto gives the stew its characteristic red colour — paprika is a fine substitute. The broth deepens considerably the next day; make ahead if possible.",
+    nutrition: [
+      {label:"Calories",value:"615 kcal"},{label:"Carbs",value:"65g"},
+      {label:"Protein",value:"30g"},{label:"Fat",value:"26g"},
+      {label:"Sat. Fat",value:"8g"},{label:"Sodium",value:"946mg"},
+      {label:"Fibre",value:"5g"},{label:"Sugar",value:"8g"}
+    ]
+  }
+];
+
+/* ══════════════════════════
+   GITHUB
+══════════════════════════ */
+const GH = {
+  get owner() { return localStorage.getItem('gh_owner')||''; },
+  get repo()  { return localStorage.getItem('gh_repo') ||''; },
+  get token() { return localStorage.getItem('gh_token')||''; },
+  get ok()    { return !!(this.owner && this.repo && this.token); }
+};
+let notesSha = localStorage.getItem('gh_notes_sha')||null;
+
+function setSyncDot(s) { document.getElementById('sync-dot').className = s; }
+
+async function ghFetch(method, path, body) {
+  return fetch(`https://api.github.com/repos/${GH.owner}/${GH.repo}/${path}`, {
+    method,
+    headers: { Authorization:`token ${GH.token}`, Accept:'application/vnd.github.v3+json', 'Content-Type':'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+}
+
+async function loadNotes() {
+  if (!GH.ok) return;
+  setSyncDot('syncing');
+  try {
+    const res = await ghFetch('GET','contents/notes.json');
+    if (res.ok) {
+      const data = await res.json();
+      notesSha = data.sha;
+      localStorage.setItem('gh_notes_sha', notesSha);
+      const notes = JSON.parse(atob(data.content.replace(/\n/g,'')));
+      Object.entries(notes).forEach(([id,note]) => localStorage.setItem('note_'+id, note));
+      setSyncDot('synced');
+    } else if (res.status === 404) {
+      setSyncDot('synced'); // notes.json not yet created — fine
+    } else { setSyncDot('error'); }
+  } catch(e) { setSyncDot('error'); }
+}
+
+async function saveNotes() {
+  if (!GH.ok) return false;
+  setSyncDot('syncing');
+  const notes = {};
+  RECIPES.forEach(r => { const n=localStorage.getItem('note_'+r.id); if(n&&n.trim()) notes[r.id]=n; });
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(notes,null,2))));
+  const body = { message:'Update recipe notes', content };
+  if (notesSha) body.sha = notesSha;
+  try {
+    const res = await ghFetch('PUT','contents/notes.json',body);
+    if (res.ok) {
+      const data = await res.json();
+      notesSha = data.content.sha;
+      localStorage.setItem('gh_notes_sha', notesSha);
+      setSyncDot('synced'); return true;
+    } else { setSyncDot('error'); return false; }
+  } catch(e) { setSyncDot('error'); return false; }
+}
+
+/* ══════════════════════════
+   SETTINGS
+══════════════════════════ */
+function openSettings() {
+  document.getElementById('gh-owner').value = GH.owner;
+  document.getElementById('gh-repo').value  = GH.repo;
+  document.getElementById('gh-token').value = GH.token;
+  document.getElementById('settings-error').style.display = 'none';
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings() { document.getElementById('settings-modal').classList.remove('open'); }
+function clearSettings() {
+  ['gh_owner','gh_repo','gh_token','gh_notes_sha'].forEach(k=>localStorage.removeItem(k));
+  notesSha=null; setSyncDot('');
+  document.getElementById('setup-banner').style.display='flex';
+  closeSettings();
+}
+async function saveSettings() {
+  const owner = document.getElementById('gh-owner').value.trim();
+  const repo  = document.getElementById('gh-repo').value.trim();
+  const token = document.getElementById('gh-token').value.trim();
+  const errEl = document.getElementById('settings-error');
+  if (!owner||!repo||!token) { errEl.textContent='All three fields are required.'; errEl.style.display='block'; return; }
+  localStorage.setItem('gh_owner',owner); localStorage.setItem('gh_repo',repo); localStorage.setItem('gh_token',token);
+  notesSha=null; errEl.style.display='none'; closeSettings();
+  document.getElementById('setup-banner').style.display='none';
+  await loadNotes();
+}
+
+/* ══════════════════════════
+   STATE & INIT
+══════════════════════════ */
+let currentCat='all', currentSearch='', currentRecipeId=null;
+
+async function init() {
+  buildCategoryNav(); renderGrid(RECIPES); updateCounts(); updateSubtitle();
+  if (!GH.ok) { document.getElementById('setup-banner').style.display='flex'; }
+  else { document.getElementById('setup-banner').style.display='none'; await loadNotes(); }
+}
+
+function buildCategoryNav() {
+  const cats=[...new Set(RECIPES.map(r=>r.category))].sort();
+  const list=document.getElementById('category-list');
+  cats.forEach(cat=>{
+    const btn=document.createElement('button'); btn.className='cat-btn';
+    btn.innerHTML=`${cat} <span class="count" id="count-${slug(cat)}">0</span>`;
+    btn.onclick=()=>filterCat(cat,btn); list.appendChild(btn);
+  });
+}
+function slug(s){return s.toLowerCase().replace(/[^a-z0-9]/g,'-');}
+function updateCounts(){
+  document.getElementById('count-all').textContent=RECIPES.length;
+  [...new Set(RECIPES.map(r=>r.category))].forEach(cat=>{
+    const el=document.getElementById('count-'+slug(cat)); if(el) el.textContent=RECIPES.filter(r=>r.category===cat).length;
+  });
+}
+function updateSubtitle(){ const n=getFiltered().length; document.getElementById('list-subtitle').textContent=n===1?'1 recipe':`${n} recipes`; }
+
+function filterCat(cat,btn){
+  currentCat=cat; document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  document.getElementById('list-heading').textContent=cat==='all'?'All Recipes':cat; applyFilters();
+}
+function filterRecipes(){ currentSearch=document.getElementById('search-input').value.toLowerCase(); applyFilters(); }
+function getFiltered(){
+  let r=RECIPES;
+  if(currentCat!=='all') r=r.filter(x=>x.category===currentCat);
+  if(currentSearch) r=r.filter(x=>x.name.toLowerCase().includes(currentSearch)||x.category.toLowerCase().includes(currentSearch)||(x.description||'').toLowerCase().includes(currentSearch));
+  return r;
+}
+function applyFilters(){
+  const results=getFiltered();
+  document.getElementById('list-subtitle').textContent=results.length===1?'1 recipe':`${results.length} recipes`;
+  renderGrid(results);
+  document.getElementById('empty-state').style.display=results.length?'none':'block';
+}
+
+function renderGrid(recipes){
+  document.getElementById('recipe-grid').innerHTML=recipes.map(r=>`
+    <div class="recipe-card" onclick="showDetail(${r.id})">
+      <img src="${r.image}" alt="${r.name}" loading="lazy" onerror="this.style.display='none'">
+      <div class="card-body">
+        <div class="card-cat">${r.category}</div>
+        <h3>${r.name}</h3>
+        <div class="card-meta"><span>👤 ${r.serves}</span><span>⏱ ${r.total}</span></div>
+      </div>
+    </div>`).join('');
+}
+
+/* ══════════════════════════
+   DETAIL
+══════════════════════════ */
+function showDetail(id){
+  const r=RECIPES.find(x=>x.id===id); if(!r) return;
+  currentRecipeId=id;
+  document.getElementById('recipe-hero').src=r.image; document.getElementById('recipe-hero').alt=r.name;
+  document.getElementById('detail-cat').textContent=r.category;
+  document.getElementById('recipe-title').textContent=r.name;
+  document.getElementById('recipe-description').textContent=r.description||'';
+  document.getElementById('meta-serves').textContent=r.serves;
+  document.getElementById('meta-prep').textContent=r.prep;
+  document.getElementById('meta-cook').textContent=r.cook;
+  document.getElementById('meta-total').textContent=r.total;
+
+  document.getElementById('ingredients-list').innerHTML=r.ingredientGroups.map(grp=>`
+    <div class="ing-group">
+      <div class="ing-group-title">${grp.title}</div>
+      ${grp.items.map(item=>`<div class="ing-item" onclick="this.classList.toggle('checked')"><span class="ing-check"></span><span class="ing-text">${item}</span></div>`).join('')}
+    </div>`).join('');
+
+  document.getElementById('method-list').innerHTML=r.method.map((step,i)=>`
+    <li><span class="step-num">${i+1}</span><span class="step-text">${step}</span></li>`).join('');
+
+  const notesEl=document.getElementById('recipe-notes');
+  if(r.notes){ notesEl.style.display='block'; notesEl.innerHTML=`<span class="notes-label">Notes</span>${r.notes}`; }
+  else notesEl.style.display='none';
+
+  document.getElementById('user-notes-ta').value=localStorage.getItem('note_'+id)||'';
+  document.getElementById('user-notes-status').textContent='';
+  document.getElementById('user-notes-hint').textContent=GH.ok?'Synced via GitHub':'Saved on this device only';
+  document.getElementById('user-notes-body').classList.remove('open');
+  document.getElementById('user-notes-header').classList.remove('open');
+
+  const nutPanel=document.getElementById('nutrition-panel');
+  nutPanel.className='';
+  nutPanel.innerHTML=r.nutrition?r.nutrition.map(n=>`<div class="nutr-item"><strong>${n.value}</strong> ${n.label}</div>`).join(''):'';
+  document.getElementById('nutrition-toggle').textContent='▸ Nutrition info (per serving)';
+  document.getElementById('recipe-source').innerHTML=r.source?`Recipe from <a href="${r.sourceUrl}" target="_blank">${r.source}</a>`:'';
+
+  document.getElementById('list-view').style.display='none';
+  document.getElementById('detail-view').style.display='block';
+  window.scrollTo(0,0);
+}
+
+function showList(){
+  document.getElementById('detail-view').style.display='none';
+  document.getElementById('list-view').style.display='block';
+  currentRecipeId=null;
+}
+
+/* ══════════════════════════
+   USER NOTES
+══════════════════════════ */
+function toggleUserNotes(){
+  document.getElementById('user-notes-header').classList.toggle('open');
+  document.getElementById('user-notes-body').classList.toggle('open');
+}
+async function saveUserNotes(){
+  if(!currentRecipeId) return;
+  const text=document.getElementById('user-notes-ta').value;
+  localStorage.setItem('note_'+currentRecipeId,text);
+  const statusEl=document.getElementById('user-notes-status');
+  if(GH.ok){ statusEl.textContent='Syncing…'; const ok=await saveNotes(); statusEl.textContent=ok?'✓ Synced':'⚠ Sync failed'; }
+  else { statusEl.textContent='✓ Saved'; }
+  setTimeout(()=>{ statusEl.textContent=''; },3000);
+}
+
+function toggleNutrition(){
+  const panel=document.getElementById('nutrition-panel'); const btn=document.getElementById('nutrition-toggle');
+  const open=panel.classList.toggle('open'); btn.textContent=(open?'▾':'▸')+' Nutrition info (per serving)';
+}
+
+window.addEventListener('beforeprint',()=>{
+  const text=currentRecipeId?(localStorage.getItem('note_'+currentRecipeId)||''):'';
+  const el=document.getElementById('print-user-notes');
+  if(text.trim()){ el.innerHTML=`<strong>My Notes</strong>${text.replace(/\n/g,'<br>')}`; el.style.display='block'; }
+  else el.style.display='none';
+});
+
+init();
+</script>
+</body>
+</html>
