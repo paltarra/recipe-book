@@ -154,6 +154,14 @@
     #recipe-source a { color: var(--rust); }
     #recipe-source a:hover { text-decoration: underline; }
 
+    /* ── SERVES SCALER ── */
+    #serves-scaler { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 11px 16px; background: var(--paper); border: 1px solid var(--tan); border-radius: var(--radius); }
+    #serves-scaler .sc-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); white-space: nowrap; }
+    #serves-slider { flex: 1; accent-color: var(--rust); cursor: pointer; }
+    #serves-display { font-size: 1.05rem; font-weight: 700; color: var(--brown); min-width: 26px; text-align: center; }
+    #serves-reset { background: none; border: 1px solid var(--tan); border-radius: 6px; padding: 4px 10px; font-size: .72rem; color: var(--muted); cursor: pointer; font-family: inherit; white-space: nowrap; }
+    #serves-reset:hover { background: var(--tan); color: var(--brown); }
+
     /* ── SETTINGS MODAL ── */
     #settings-modal { display: none; position: fixed; inset: 0; z-index: 100; }
     #settings-modal.open { display: flex; align-items: center; justify-content: center; }
@@ -175,7 +183,7 @@
 
     /* ── PRINT ── */
     @media print {
-      #sidebar, #detail-toolbar, #user-notes-section,
+      #sidebar, #detail-toolbar, #user-notes-section, #serves-scaler,
       #nutrition-toggle, .ing-check, #setup-banner, #settings-modal { display: none !important; }
       #app { display: block; }
       #list-view { display: none !important; }
@@ -267,6 +275,12 @@
           <div class="meta-item"><div class="meta-label">Prep</div><div class="meta-value" id="meta-prep"></div></div>
           <div class="meta-item"><div class="meta-label">Cook</div><div class="meta-value" id="meta-cook"></div></div>
           <div class="meta-item"><div class="meta-label">Total</div><div class="meta-value" id="meta-total"></div></div>
+        </div>
+        <div id="serves-scaler">
+          <span class="sc-label">Serves</span>
+          <input type="range" id="serves-slider" min="1" max="20" step="1" oninput="scaleServings(this.value)">
+          <span id="serves-display">4</span>
+          <button id="serves-reset" onclick="resetServings()">Reset</button>
         </div>
         <div id="recipe-columns">
           <div id="ingredients-col">
@@ -1044,6 +1058,80 @@ function renderGrid(recipes){
 }
 
 /* ══════════════════════════
+   SERVES SCALER
+══════════════════════════ */
+let baseServes = 1;
+
+const UNICODE_FRACS = {'½':0.5,'¼':0.25,'¾':0.75,'⅓':1/3,'⅔':2/3,'⅛':0.125,'⅜':0.375,'⅝':0.625,'⅞':0.875};
+const FRAC_RE = /[½¼¾⅓⅔⅛⅜⅝⅞]/;
+
+function parseSingle(s){
+  let v=0;
+  const im=s.match(/^(\d+(\.\d+)?)/); if(im) v+=parseFloat(im[1]);
+  const fm=s.match(FRAC_RE); if(fm) v+=UNICODE_FRACS[fm[0]];
+  return v;
+}
+
+function parseLeadingQty(str){
+  // A "quantity token" is: digits + optional frac char, OR standalone frac char
+  const QT='[\\d]*[½¼¾⅓⅔⅛⅜⅝⅞]|[\\d]+\\.?[\\d]*';
+  // Try range first: "6–8", "2–2½"
+  const rm=str.match(new RegExp(`^(${QT})\\s*[-–]\\s*(${QT})`));
+  if(rm){ const lo=parseSingle(rm[1]),hi=parseSingle(rm[2]); if(lo>0&&hi>0) return{type:'range',lo,hi,raw:rm[0]}; }
+  // Single
+  const sm=str.match(new RegExp(`^(${QT})`));
+  if(sm){ const val=parseSingle(sm[1]); if(val>0) return{type:'single',val,raw:sm[1]}; }
+  return null;
+}
+
+function formatQty(val){
+  if(val<=0) return '0';
+  const NICE=[[0.125,'⅛'],[0.25,'¼'],[1/3,'⅓'],[0.375,'⅜'],[0.5,'½'],[0.625,'⅝'],[2/3,'⅔'],[0.75,'¾'],[0.875,'⅞']];
+  const whole=Math.floor(val+0.02);
+  const frac=val-whole;
+  for(const [f,sym] of NICE){ if(Math.abs(frac-f)<0.04) return whole>0?`${whole}${sym}`:sym; }
+  // No neat fraction — round sensibly
+  if(val>=100) return Math.round(val).toString();
+  if(val>=10)  return (Math.round(val*2)/2).toString(); // nearest 0.5
+  if(Math.abs(val-Math.round(val))<0.08) return Math.round(val).toString();
+  return parseFloat(val.toFixed(1)).toString();
+}
+
+function scaleIngredient(original, ratio){
+  if(ratio===1) return original;
+  const q=parseLeadingQty(original.trim()); if(!q) return original;
+  let scaled;
+  if(q.type==='range'){
+    scaled=`${formatQty(q.lo*ratio)}–${formatQty(q.hi*ratio)}`;
+  } else {
+    scaled=formatQty(q.val*ratio);
+  }
+  return original.replace(q.raw, scaled);
+}
+
+function renderIngredients(r, ratio){
+  document.getElementById('ingredients-list').innerHTML=r.ingredientGroups.map(grp=>`
+    <div class="ing-group">
+      <div class="ing-group-title">${grp.title}</div>
+      ${grp.items.map(item=>`<div class="ing-item" onclick="this.classList.toggle('checked')"><span class="ing-check"></span><span class="ing-text">${scaleIngredient(item,ratio)}</span></div>`).join('')}
+    </div>`).join('');
+}
+
+function scaleServings(n){
+  n=parseInt(n)||baseServes;
+  document.getElementById('serves-display').textContent=n;
+  document.getElementById('meta-serves').textContent=n;
+  const r=RECIPES.find(x=>x.id===currentRecipeId); if(!r) return;
+  renderIngredients(r, n/baseServes);
+}
+
+function resetServings(){
+  const sl=document.getElementById('serves-slider');
+  sl.value=baseServes;
+  scaleServings(baseServes);
+}
+
+/* ══════════════════════════
    DETAIL
 ══════════════════════════ */
 function showDetail(id){
@@ -1053,16 +1141,18 @@ function showDetail(id){
   document.getElementById('detail-cat').textContent=r.category;
   document.getElementById('recipe-title').textContent=r.name;
   document.getElementById('recipe-description').textContent=r.description||'';
-  document.getElementById('meta-serves').textContent=r.serves;
   document.getElementById('meta-prep').textContent=r.prep;
   document.getElementById('meta-cook').textContent=r.cook;
   document.getElementById('meta-total').textContent=r.total;
 
-  document.getElementById('ingredients-list').innerHTML=r.ingredientGroups.map(grp=>`
-    <div class="ing-group">
-      <div class="ing-group-title">${grp.title}</div>
-      ${grp.items.map(item=>`<div class="ing-item" onclick="this.classList.toggle('checked')"><span class="ing-check"></span><span class="ing-text">${item}</span></div>`).join('')}
-    </div>`).join('');
+  // Serves scaler setup
+  baseServes=parseInt(r.serves)||1;
+  const sl=document.getElementById('serves-slider');
+  sl.min=1; sl.max=Math.max(baseServes*4,12); sl.value=baseServes;
+  document.getElementById('serves-display').textContent=baseServes;
+  document.getElementById('meta-serves').textContent=r.serves;
+
+  renderIngredients(r, 1);
 
   document.getElementById('method-list').innerHTML=r.method.map((step,i)=>`
     <li><span class="step-num">${i+1}</span><span class="step-text">${step}</span></li>`).join('');
